@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Advisor v18.1</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #F7FAFC; color: #2D3748; line-height: 1.6; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+        header { text-align: center; margin-bottom: 60px; }
+        h1 { font-size: 2.5rem; font-weight: 700; color: #1A202C; margin-bottom: 10px; }
+        .subtitle { font-size: 1rem; color: #718096; }
+        .upload-area { border: 2px dashed #CBD5E0; border-radius: 8px; padding: 60px 40px; text-align: center; cursor: pointer; background: white; transition: all 0.2s; margin-bottom: 40px; }
+        .upload-area:hover { border-color: #4A5568; background: #F7FAFC; }
+        .upload-area h2 { font-size: 1.25rem; font-weight: 600; color: #2D3748; margin-bottom: 10px; }
+        input[type="file"] { display: none; }
+        .btn { background: #2D3748; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; margin: 10px 5px; transition: background 0.2s; }
+        .btn:hover { background: #1A202C; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .hidden { display: none !important; }
+        .spinner { border: 3px solid #E2E8F0; border-top: 3px solid #2D3748; border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; margin: 40px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 40px 0; }
+        .metric-card { background: white; padding: 24px; border-radius: 8px; border: 1px solid #E2E8F0; }
+        .metric-value { font-size: 2rem; font-weight: 700; color: #2D3748; }
+        .metric-label { font-size: 0.875rem; color: #718096; margin-top: 8px; }
+        .section { background: white; padding: 32px; border-radius: 8px; border: 1px solid #E2E8F0; margin: 20px 0; }
+        h2 { font-size: 1.5rem; font-weight: 600; color: #1A202C; margin-bottom: 20px; }
+        .section-description { color: #718096; margin-bottom: 20px; font-size: 0.875rem; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #E2E8F0; font-size: 0.875rem; }
+        th { background: #F7FAFC; font-weight: 600; color: #2D3748; }
+        tr:hover { background: #F7FAFC; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #2D3748; font-size: 0.875rem; }
+        select, input[type="number"] { width: 100%; padding: 10px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 0.875rem; background: white; }
+        select:focus, input:focus { outline: none; border-color: #4A5568; }
+        .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+        .result-box { background: #F7FAFC; padding: 24px; border-radius: 8px; border: 1px solid #E2E8F0; margin-top: 20px; }
+        .result-box h3 { font-size: 1.125rem; font-weight: 600; color: #2D3748; margin-bottom: 16px; }
+        .result-box pre { white-space: pre-wrap; line-height: 1.6; color: #4A5568; font-size: 0.875rem; }
+        .badge { display: inline-block; padding: 6px 12px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; margin-top: 12px; }
+        .badge-success { background: #C6F6D5; color: #22543D; }
+        .badge-error { background: #FED7D7; color: #742A2A; }
+        .badge-info { background: #BEE3F8; color: #2C5282; }
+        .button-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+        @media (max-width: 768px) { h1 { font-size: 2rem; } .button-group { flex-direction: column; } .btn { width: 100%; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Data Advisor v18.1 🔮</h1>
+            <p class="subtitle">Professionele data-analyse met AI insights en forecasting</p>
+        </header>
+        
+        <div id="uploadArea" class="upload-area">
+            <h2>Upload je dataset</h2>
+            <p>Sleep een bestand of klik om te selecteren</p>
+            <button class="btn" onclick="document.getElementById('fileInput').click()" style="margin-top: 20px;">Selecteer bestand</button>
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+            <p style="margin-top: 16px; color: #A0AEC0; font-size: 0.75rem;">Ondersteund: CSV, XLSX, XLS (max 50MB)</p>
+        </div>
+        
+        <div id="loading" class="hidden">
+            <div class="spinner"></div>
+            <p style="text-align: center; color: #718096;" id="loadingText">Bezig met laden...</p>
+        </div>
+        
+        <div id="results" class="hidden">
+            <div class="metrics">
+                <div class="metric-card">
+                    <div class="metric-value" id="metricRows">-</div>
+                    <div class="metric-label">Rijen</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metricColumns">-</div>
+                    <div class="metric-label">Kolommen</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="metricMissing">-</div>
+                    <div class="metric-label">Missing values</div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Data preview</h2>
+                <div id="dataPreview" style="overflow-x: auto;"></div>
+            </div>
+            
+            <div class="section">
+                <h2>Statistieken</h2>
+                <div id="statistics"></div>
+            </div>
+            
+            <!-- 🔧 FORECAST SECTION MET VERBETERINGEN -->
+            <div class="section" id="forecastSection" style="display:none;">
+                <h2>🔮 Time Series Forecasting</h2>
+                <p class="section-description">Voorspel toekomstige waarden op basis van historische trends</p>
+                <div class="settings-grid">
+                    <div class="form-group">
+                        <label>Datum kolom</label>
+                        <select id="dateColumn"><option value="">Selecteer datum</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Target kolom</label>
+                        <select id="forecastTarget"><option value="">Selecteer numeriek</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Voorspel periodes</label>
+                        <input type="number" id="forecastPeriods" value="30" min="1" max="365">
+                    </div>
+                    <div class="form-group">
+                        <label>Model type</label>
+                        <select id="forecastModel">
+                            <option value="auto">Auto (beste model)</option>
+                            <option value="ets">ETS (Exponential Smoothing)</option>
+                            <option value="arima">ARIMA</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn" onclick="generateForecast()">Genereer Forecast</button>
+                <div id="forecastResults" class="hidden"></div>
+            </div>
+            
+            <div class="section">
+                <h2>AI Analyse</h2>
+                <p class="section-description">Laat AI de dataset analyseren voor inzichten en aanbevelingen</p>
+                <button class="btn" onclick="generateInsights()">Genereer analyse</button>
+                <div id="insightsResults" class="hidden"></div>
+            </div>
+            
+            <div class="section">
+                <h2>PDF Rapport</h2>
+                <p class="section-description">Download een compleet rapport met alle analyses</p>
+                <div class="button-group">
+                    <button class="btn" onclick="downloadPDF()">Download rapport</button>
+                </div>
+                <div id="pdfStatus" class="hidden"></div>
+            </div>
+            
+            <div class="section">
+                <h2>Machine Learning</h2>
+                <p class="section-description">Train een predictief model op je data</p>
+                <div class="settings-grid">
+                    <div class="form-group">
+                        <label>Target kolom</label>
+                        <select id="targetColumn"><option value="">Selecteer kolom</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Model type</label>
+                        <select id="modelType">
+                            <option value="regression">Regression</option>
+                            <option value="classification">Classification</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Test size (%)</label>
+                        <input type="number" id="testSize" value="20" min="10" max="50">
+                    </div>
+                </div>
+                <button class="btn" onclick="trainModel()">Train model</button>
+                <div id="modelResults" class="hidden"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let currentFile = null;
+        let currentData = null;
+        
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) handleFile(file);
+        });
+        
+        const uploadArea = document.getElementById('uploadArea');
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.style.borderColor = '#4A5568'; });
+        uploadArea.addEventListener('dragleave', () => uploadArea.style.borderColor = '#CBD5E0');
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#CBD5E0';
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
+        });
+        
+        async function handleFile(file) {
+            if (file.size > 50 * 1024 * 1024) {
+                alert('Bestand te groot (max 50MB)');
+                return;
+            }
+            
+            currentFile = file;
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('results').classList.add('hidden');
+            document.getElementById('loadingText').textContent = `Verwerken: ${file.name}...`;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch(`${API_URL}/upload`, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error('Upload failed');
+                currentData = await response.json();
+                displayResults(currentData);
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Fout: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+        
+        function displayResults(data) {
+            document.getElementById('results').classList.remove('hidden');
+            document.getElementById('metricRows').textContent = data.rows.toLocaleString();
+            document.getElementById('metricColumns').textContent = data.columns;
+            document.getElementById('metricMissing').textContent = data.missing_total || 0;
+            
+            // Data Preview
+            const previewDiv = document.getElementById('dataPreview');
+            if (data.preview && data.preview.length > 0) {
+                let html = '<table><thead><tr>';
+                Object.keys(data.preview[0]).forEach(col => html += `<th>${col}</th>`);
+                html += '</tr></thead><tbody>';
+                data.preview.slice(0, 10).forEach(row => {
+                    html += '<tr>';
+                    Object.values(row).forEach(val => html += `<td>${val !== null && val !== '' ? val : '-'}</td>`);
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+                previewDiv.innerHTML = html;
+            }
+            
+            // Statistics
+            const statsDiv = document.getElementById('statistics');
+            if (data.numeric_stats && Object.keys(data.numeric_stats).length > 0) {
+                let html = '<table><thead><tr><th>Kolom</th><th>Mean</th><th>Median</th><th>Std</th><th>Min</th><th>Max</th></tr></thead><tbody>';
+                for (const [col, stats] of Object.entries(data.numeric_stats)) {
+                    html += `<tr><td><strong>${col}</strong></td><td>${stats.mean?.toFixed(2) || '-'}</td><td>${stats.median?.toFixed(2) || '-'}</td><td>${stats.std?.toFixed(2) || '-'}</td><td>${stats.min?.toFixed(2) || '-'}</td><td>${stats.max?.toFixed(2) || '-'}</td></tr>`;
+                }
+                html += '</tbody></table>';
+                statsDiv.innerHTML = html;
+            } else {
+                statsDiv.innerHTML = '<p style="color:#718096;">Geen numerieke kolommen</p>';
+            }
+            
+            // ML target
+            const targetSelect = document.getElementById('targetColumn');
+            if (data.numeric_stats) {
+                targetSelect.innerHTML = '<option value="">Selecteer kolom</option>';
+                Object.keys(data.numeric_stats).forEach(col => {
+                    targetSelect.innerHTML += `<option value="${col}">${col}</option>`;
+                });
+            }
+            
+            // Forecasting
+            if (data.has_timeseries && data.date_column) {
+                document.getElementById('forecastSection').style.display = 'block';
+                document.getElementById('dateColumn').innerHTML = `<option value="${data.date_column}">${data.date_column}</option>`;
+                
+                const forecastTarget = document.getElementById('forecastTarget');
+                if (data.numeric_stats) {
+                    forecastTarget.innerHTML = '<option value="">Selecteer kolom</option>';
+                    Object.keys(data.numeric_stats).forEach(col => {
+                        forecastTarget.innerHTML += `<option value="${col}">${col}</option>`;
+                    });
+                }
+            } else {
+                document.getElementById('forecastSection').style.display = 'none';
+            }
+        }
+        
+        // 🔧 VERBETERDE FORECAST FUNCTIE
+        async function generateForecast() {
+            const dateColumn = document.getElementById('dateColumn').value;
+            const targetColumn = document.getElementById('forecastTarget').value;
+            const periods = parseInt(document.getElementById('forecastPeriods').value);
+            const modelType = document.getElementById('forecastModel').value;
+            
+            if (!dateColumn || !targetColumn) {
+                alert('Selecteer datum en target kolom');
+                return;
+            }
+            
+            const forecastDiv = document.getElementById('forecastResults');
+            forecastDiv.innerHTML = '<div class="spinner"></div><p style="text-align:center;color:#718096;">Forecasting...</p>';
+            forecastDiv.classList.remove('hidden');
+            
+            const formData = new FormData();
+            formData.append('file', currentFile);
+            formData.append('date_column', dateColumn);
+            formData.append('target_column', targetColumn);
+            formData.append('periods', periods);
+            formData.append('model_type', modelType);
+            
+            try {
+                const response = await fetch(`${API_URL}/forecast`, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error('Forecast failed');
+                
+                const result = await response.json();
+                
+                // Metrics display
+                let trendIcon = result.metrics.trend === 'up' ? '📈' : '📉';
+                let trendColor = result.metrics.trend === 'up' ? '#48BB78' : '#F56565';
+                let changePct = Math.abs(result.metrics.change_pct).toFixed(1);
+                
+                let html = `
+                    <div class="result-box">
+                        <h3>🔮 Forecast Resultaten</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0;">
+                            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #E2E8F0;">
+                                <div style="font-size: 0.875rem; color: #718096; margin-bottom: 5px;">Model</div>
+                                <div style="font-size: 1.25rem; font-weight: 600; color: #2D3748;">${result.model}</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #E2E8F0;">
+                                <div style="font-size: 0.875rem; color: #718096; margin-bottom: 5px;">Historisch Ø</div>
+                                <div style="font-size: 1.25rem; font-weight: 600; color: #2D3748;">${result.metrics.mean_historical.toFixed(2)}</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #E2E8F0;">
+                                <div style="font-size: 0.875rem; color: #718096; margin-bottom: 5px;">Forecast Ø</div>
+                                <div style="font-size: 1.25rem; font-weight: 600; color: #2D3748;">${result.metrics.mean_forecast.toFixed(2)}</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #E2E8F0;">
+                                <div style="font-size: 0.875rem; color: #718096; margin-bottom: 5px;">Trend</div>
+                                <div style="font-size: 1.25rem; font-weight: 600; color: ${trendColor};">${trendIcon} ${changePct}%</div>
+                            </div>
+                        </div>
+                        <div id="forecastChart" style="margin-top: 20px;"></div>
+                        <div class="badge badge-success" style="margin-top: 15px;">Forecast compleet voor ${periods} periodes</div>
+                    </div>
+                `;
+                
+                forecastDiv.innerHTML = html;
+                
+                // 🔧 FIX: Converteer ISO-8601 strings naar Date objecten voor Plotly
+                const historicalDates = result.historical.dates.map(d => new Date(d));
+                const forecastDates = result.forecast.dates.map(d => new Date(d));
+                
+                // 🎨 VISUELE VERBETERING: Duidelijke onderscheiding historisch vs forecast
+                const historical_trace = {
+                    x: historicalDates,  // ← Date objecten ipv strings
+                    y: result.historical.values,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'Historische Data',
+                    line: { color: '#2D3748', width: 3 },  // Donkergrijs, dikkere lijn
+                    marker: { size: 6, color: '#2D3748' },  // Ronde markers
+                    hovertemplate: '<b>%{x|%Y-%m-%d}</b><br>Waarde: %{y:.2f}<extra></extra>'
+                };
+                
+                const forecast_trace = {
+                    x: forecastDates,  // ← Date objecten ipv strings
+                    y: result.forecast.values,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'Forecast',
+                    line: { 
+                        color: '#48BB78',  // Groen
+                        width: 3, 
+                        dash: 'dash'  // Stippellijn
+                    },
+                    marker: { 
+                        size: 9,  // Grotere markers
+                        color: '#48BB78', 
+                        symbol: 'diamond'  // Diamond shape
+                    },
+                    hovertemplate: '<b>%{x|%Y-%m-%d}</b><br>Forecast: %{y:.2f}<extra></extra>'
+                };
+                
+                // Confidence interval (transparante band)
+                const confidence_lower = {
+                    x: forecastDates,
+                    y: result.forecast.lower_bound,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: '95% Betrouwbaarheid',
+                    line: { width: 0 },
+                    fillcolor: 'rgba(72, 187, 120, 0.2)',  // Lichtgroen
+                    fill: 'tonexty',
+                    showlegend: true,
+                    hoverinfo: 'skip'
+                };
+                
+                const confidence_upper = {
+                    x: forecastDates,
+                    y: result.forecast.upper_bound,
+                    type: 'scatter',
+                    mode: 'lines',
+                    line: { width: 0 },
+                    showlegend: false,
+                    hoverinfo: 'skip'
+                };
+                
+                // Plotly layout met unified hover
+                const layout = {
+                    title: {
+                        text: `${result.target} - ${periods} Periodes Forecast (${result.model})`,
+                        font: { size: 18, color: '#2D3748', family: 'Arial, sans-serif' }
+                    },
+                    xaxis: { 
+                        title: 'Datum',
+                        showgrid: true,
+                        gridcolor: '#E2E8F0',
+                        type: 'date'  // Expliciete datum-as
+                    },
+                    yaxis: { 
+                        title: result.target,
+                        showgrid: true,
+                        gridcolor: '#E2E8F0'
+                    },
+                    height: 600,  // Grotere grafiek
+                    hovermode: 'x unified',  // Unified hover over verticale lijn
+                    plot_bgcolor: '#FAFAFA',
+                    paper_bgcolor: 'white',
+                    legend: {
+                        x: 0.02,
+                        y: 0.98,
+                        bgcolor: 'rgba(255,255,255,0.95)',
+                        bordercolor: '#E2E8F0',
+                        borderwidth: 1,
+                        font: { size: 12 }
+                    },
+                    margin: { l: 60, r: 30, t: 80, b: 60 }
+                };
+                
+                // Render plot (let op volgorde: lower→upper→historical→forecast)
+                Plotly.newPlot('forecastChart', 
+                    [confidence_lower, confidence_upper, historical_trace, forecast_trace],
+                    layout,
+                    {responsive: true, displayModeBar: true, displaylogo: false}
+                );
+                
+            } catch (error) {
+                forecastDiv.innerHTML = `
+                    <div class="result-box">
+                        <h3>❌ Forecast Error</h3>
+                        <p style="color:#718096;">${error.message}</p>
+                        <div class="badge badge-error">Controleer de data en probeer opnieuw</div>
+                    </div>
+                `;
+            }
+        }
+        
+        async function generateInsights() {
+            if (!currentFile) { alert('Upload eerst een bestand'); return; }
+            
+            const insightsDiv = document.getElementById('insightsResults');
+            insightsDiv.innerHTML = '<div class="spinner"></div><p style="text-align:center;color:#718096;">AI analyseert...</p>';
+            insightsDiv.classList.remove('hidden');
+            
+            const formData = new FormData();
+            formData.append('file', currentFile);
+            
+            try {
+                const response = await fetch(`${API_URL}/insights`, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error('Insights failed');
+                
+                const result = await response.json();
+                insightsDiv.innerHTML = `
+                    <div class="result-box">
+                        <h3>AI Analyse (${result.model})</h3>
+                        <pre>${result.insights}</pre>
+                        <div class="badge badge-info">Geanalyseerd: ${result.rows_analyzed} rijen</div>
+                    </div>
+                `;
+            } catch (error) {
+                insightsDiv.innerHTML = `
+                    <div class="result-box">
+                        <h3>Error</h3>
+                        <p>${error.message}</p>
+                        <div class="badge badge-error">Check API key</div>
+                    </div>
+                `;
+            }
+        }
+        
+        async function downloadPDF() {
+            if (!currentFile) { alert('Upload eerst een bestand'); return; }
+            
+            const statusDiv = document.getElementById('pdfStatus');
+            statusDiv.innerHTML = '<div class="spinner"></div><p style="text-align:center;color:#718096;">PDF genereren...</p>';
+            statusDiv.classList.remove('hidden');
+            
+            const formData = new FormData();
+            formData.append('file', currentFile);
+            
+            try {
+                const response = await fetch(`${API_URL}/generate-pdf`, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error('PDF failed');
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `report_${Date.now()}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                statusDiv.innerHTML = `<div class="result-box"><h3>PDF Succesvol</h3><div class="badge badge-success">Download compleet</div></div>`;
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="result-box"><h3>Error</h3><p>${error.message}</p></div>`;
+            }
+        }
+        
+        async function trainModel() {
+            const target = document.getElementById('targetColumn').value;
+            const modelType = document.getElementById('modelType').value;
+            const testSize = parseInt(document.getElementById('testSize').value) / 100;
+            
+            if (!target) { alert('Selecteer target kolom'); return; }
+            
+            const modelDiv = document.getElementById('modelResults');
+            modelDiv.innerHTML = '<div class="spinner"></div>';
+            modelDiv.classList.remove('hidden');
+            
+            const formData = new FormData();
+            formData.append('file', currentFile);
+            formData.append('target', target);
+            formData.append('model_type', modelType);
+            formData.append('test_size', testSize);
+            
+            try {
+                const response = await fetch(`${API_URL}/train`, { method: 'POST', body: formData });
+                if (!response.ok) throw new Error('Training failed');
+                
+                const result = await response.json();
+                let html = `<div class="result-box"><h3>${result.model}</h3><h4>Metrics:</h4><ul>`;
+                for (const [key, value] of Object.entries(result.metrics)) {
+                    html += `<li><strong>${key}:</strong> ${typeof value === 'number' ? value.toFixed(4) : value}</li>`;
+                }
+                html += `</ul><div class="badge badge-success">Model getraind</div></div>`;
+                modelDiv.innerHTML = html;
+            } catch (error) {
+                modelDiv.innerHTML = `<div class="result-box"><h3>Error</h3><p>${error.message}</p></div>`;
+            }
+        }
+    </script>
+</body>
+</html>
